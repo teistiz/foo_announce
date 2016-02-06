@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include "resource.h"
+#include "resource1.h"
 
 #define MAX_STR_LENGTH 256
 
@@ -27,75 +27,80 @@ class AnnouncerPreferences
 {
 public:
 	AnnouncerPreferences(preferences_page_callback::ptr callback)
-		: mCallback(callback) { }
+		: m_callback(callback)
+	{
+	}
 	
-	enum { IDD = IDD_MYPREFERENCES };
-
-	// preferences page overrides
-	virtual t_uint32 get_state() override;
-	virtual void apply() override;
-	virtual void reset() override;
-	virtual HWND get_wnd() override;
-
+	enum { IDD = IDD_DIALOG1 };
 	// WTL message mapping
 	BEGIN_MSG_MAP(AnnouncerPreferences)
 		MSG_WM_INITDIALOG(OnInitDialog)
-		COMMAND_HANDLER_EX(IDC_ADDRESS, EN_CHANGE, OnEditChange)
-		COMMAND_HANDLER_EX(IDC_APIKEY , EN_CHANGE, OnEditChange)
+		COMMAND_HANDLER_EX(IDC_SERVERADDRESS, EN_CHANGE, OnEditChange)
+		COMMAND_HANDLER_EX(IDC_APIKEY, EN_CHANGE, OnEditChange)
 		COMMAND_HANDLER_EX(IDC_EVENTID, EN_CHANGE, OnEditChange)
 	END_MSG_MAP()
-protected:
+
+	// preferences page overrides
+	t_uint32 get_state() override;
+	void apply() override;
+	void reset() override;
+	HWND get_wnd() override { return m_hWnd; }
+
+	static BOOL CALLBACK proc(HWND, UINT, WPARAM, LPARAM);
+private:
 	BOOL OnInitDialog(CWindow, LPARAM);
 	void OnEditChange(UINT, int, CWindow);
 	bool HasChanged();
 	void OnChanged();
 
-	HWND mWindowHandle;
-	const preferences_page_callback::ptr mCallback;
+	// Calling this will make Foobar2000 ask if we consider the dialog changed
+	// and possibly update the Apply button's state.
+	const preferences_page_callback::ptr m_callback;
 };
 
-BOOL AnnouncerPreferences::OnInitDialog(CWindow window, LPARAM param) {
-	mWindowHandle = window.m_hWnd;
-	// should we init them to config values?
-	SetDlgItemTextA(get_wnd(), IDC_ADDRESS, "");
-	SetDlgItemTextA(get_wnd(), IDC_APIKEY, "");
-	SetDlgItemTextA(get_wnd(), IDC_EVENTID, "");
-	return FALSE;
-}
+#include <type_traits>
+//static_assert(!std::is_abstract<AnnouncerPreferences>(), "AnnouncerPreferences must not be abstract!");
 
-HWND AnnouncerPreferences::get_wnd() {
-	return mWindowHandle;
+BOOL AnnouncerPreferences::OnInitDialog(CWindow window, LPARAM) {
+	console::info("Announcer: OnInitDialog");
+	m_hWnd = window.m_hWnd;
+	// should we init them to config values?
+	SetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, cfg_address.toString());
+	SetDlgItemTextA(get_wnd(), IDC_APIKEY, cfg_apikey.toString());
+	SetDlgItemTextA(get_wnd(), IDC_EVENTID, cfg_eventid.toString());
+	return TRUE;
 }
 
 void AnnouncerPreferences::apply() {
-	HWND hwnd = get_wnd();
+	console::info("Announcer: apply");
 	unsigned int len;
 	char tmpstr[MAX_STR_LENGTH];
-	len = GetDlgItemTextA(hwnd, IDC_ADDRESS, tmpstr, sizeof(tmpstr));
+	len = GetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, tmpstr, sizeof(tmpstr));
 	cfg_address.set_string(tmpstr, len);
-	len = GetDlgItemTextA(hwnd, IDC_APIKEY, tmpstr, sizeof(tmpstr));
+	len = GetDlgItemTextA(get_wnd(), IDC_APIKEY, tmpstr, sizeof(tmpstr));
 	cfg_apikey.set_string(tmpstr, len);
-	len = GetDlgItemTextA(hwnd, IDC_EVENTID, tmpstr, sizeof(tmpstr));
+	len = GetDlgItemTextA(get_wnd(), IDC_EVENTID, tmpstr, sizeof(tmpstr));
 	cfg_eventid.set_string(tmpstr, len);
 	OnChanged();
 }
 
 bool AnnouncerPreferences::HasChanged() {
-	HWND hwnd = get_wnd();
+	console::info("Announcer: HasChanged");
 	bool changed = false;
 	char tmpstr[MAX_STR_LENGTH];
-	GetDlgItemTextA(hwnd, IDC_ADDRESS, tmpstr, sizeof(tmpstr));
+	GetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, tmpstr, sizeof(tmpstr));
 	changed |= (strcmp(cfg_address.toString(), tmpstr) != 0);
-	GetDlgItemTextA(hwnd, IDC_APIKEY, tmpstr, sizeof(tmpstr));
+	GetDlgItemTextA(get_wnd(), IDC_APIKEY, tmpstr, sizeof(tmpstr));
 	changed |= (strcmp(cfg_apikey.toString(), tmpstr) != 0);
-	GetDlgItemTextA(hwnd, IDC_EVENTID, tmpstr, sizeof(tmpstr));
+	GetDlgItemTextA(get_wnd(), IDC_EVENTID, tmpstr, sizeof(tmpstr));
 	changed |= (strcmp(cfg_eventid.toString(), tmpstr) != 0);
 	return changed;
 }
 
 void AnnouncerPreferences::reset() {
+	console::info("Announcer: reset");
 	// set dialog items back to defaults
-	SetDlgItemTextA(get_wnd(), IDC_ADDRESS, "");
+	SetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, "");
 	SetDlgItemTextA(get_wnd(), IDC_APIKEY, "");
 	SetDlgItemTextA(get_wnd(), IDC_EVENTID, "");
 }
@@ -113,30 +118,37 @@ void AnnouncerPreferences::OnEditChange(UINT, int, CWindow) {
 }
 
 void AnnouncerPreferences::OnChanged() {
-	mCallback->on_state_changed();
+	// let foobar know stuff changed and the Apply button may need updating
+	m_callback->on_state_changed();
+}
+
+BOOL CALLBACK AnnouncerPreferences::proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+	console::info("AnnouncerPreferences::proc()");
+	if (message == WM_INITDIALOG) {
+		auto self = reinterpret_cast<AnnouncerPreferences*>(lparam);
+		if (self) {
+			console::info("AnnouncerPreferences handling WM_INITDIALOG");
+			self->m_hWnd = hwnd;
+			self->OnInitDialog(CWindow(hwnd), lparam);
+		}
+		return TRUE;
+	}
+
+	return FALSE;
 }
 
 class preferences_page_myimpl : public preferences_page_impl<AnnouncerPreferences> {
 public:
-	const char* get_name() {
+	virtual const char* get_name() override {
 		return "foo_announce";
 	}
-	GUID get_guid() {
+	virtual GUID get_guid() override {
 		return guid_announcerPreferences;
 	}
-	GUID get_parent_guid() {
+	virtual GUID get_parent_guid() override {
 		return guid_tools;
 	}
 };
 
-
-// This is defined somewhere under foobar2000_sdk_helpers, but building
-// it and linking it in does not banish the undefined external dep errors.
-// Copypasting is easier than reverse engineering awful build systems.
-PFC_NORETURN PFC_NOINLINE void WIN32_OP_FAIL() {
-	const DWORD code = GetLastError();
-	PFC_ASSERT(code != NO_ERROR);
-	throw exception_win32(code);
-}
-
-static preferences_page_factory_t<preferences_page_myimpl> g_preferences_page_myimpl_factory;
+static preferences_page_factory_t<preferences_page_myimpl>
+g_preferences_page_myimpl_factory;

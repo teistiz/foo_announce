@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "targetver.h"
+
 // need to include these here, otherwise foobar's header will
 // force us to use WinSock 1. 
 #include <WinSock2.h>
