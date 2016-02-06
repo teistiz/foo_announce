@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "resource1.h"
+#include <vector>
 
 #define MAX_STR_LENGTH 256
 
@@ -44,9 +45,6 @@ public:
 	t_uint32 get_state() override;
 	void apply() override;
 	void reset() override;
-	HWND get_wnd() override { return m_hWnd; }
-
-	static BOOL CALLBACK proc(HWND, UINT, WPARAM, LPARAM);
 private:
 	BOOL OnInitDialog(CWindow, LPARAM);
 	void OnEditChange(UINT, int, CWindow);
@@ -63,11 +61,14 @@ private:
 
 BOOL AnnouncerPreferences::OnInitDialog(CWindow window, LPARAM) {
 	console::info("Announcer: OnInitDialog");
-	m_hWnd = window.m_hWnd;
+	//m_hWnd = window.m_hWnd;
 	// should we init them to config values?
 	SetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, cfg_address.toString());
+	console::info(cfg_address.toString());
 	SetDlgItemTextA(get_wnd(), IDC_APIKEY, cfg_apikey.toString());
+	console::info(cfg_apikey.toString());
 	SetDlgItemTextA(get_wnd(), IDC_EVENTID, cfg_eventid.toString());
+	console::info(cfg_eventid.toString());
 	return TRUE;
 }
 
@@ -76,10 +77,13 @@ void AnnouncerPreferences::apply() {
 	unsigned int len;
 	char tmpstr[MAX_STR_LENGTH];
 	len = GetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, tmpstr, sizeof(tmpstr));
+	console::info(tmpstr);
 	cfg_address.set_string(tmpstr, len);
 	len = GetDlgItemTextA(get_wnd(), IDC_APIKEY, tmpstr, sizeof(tmpstr));
+	console::info(tmpstr);
 	cfg_apikey.set_string(tmpstr, len);
 	len = GetDlgItemTextA(get_wnd(), IDC_EVENTID, tmpstr, sizeof(tmpstr));
+	console::info(tmpstr);
 	cfg_eventid.set_string(tmpstr, len);
 	OnChanged();
 }
@@ -88,11 +92,24 @@ bool AnnouncerPreferences::HasChanged() {
 	console::info("Announcer: HasChanged");
 	bool changed = false;
 	char tmpstr[MAX_STR_LENGTH];
+
+	TCHAR ttmpstr[MAX_STR_LENGTH];
+	GetDlgItemTextW(IDC_SERVERADDRESS, ttmpstr, sizeof(ttmpstr));
+	auto len = WideCharToMultiByte(CP_UTF8, 0, ttmpstr, -1, NULL, 0, NULL, NULL);
+	std::vector<char> tmputf8;
+	tmputf8.reserve(len);
+	WideCharToMultiByte(CP_UTF8, 0, ttmpstr, -1, tmputf8.data(), len, NULL, NULL);
+	console::error(tmputf8.data());
+
+	
 	GetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, tmpstr, sizeof(tmpstr));
+	console::info(tmpstr);
 	changed |= (strcmp(cfg_address.toString(), tmpstr) != 0);
 	GetDlgItemTextA(get_wnd(), IDC_APIKEY, tmpstr, sizeof(tmpstr));
+	console::info(tmpstr);
 	changed |= (strcmp(cfg_apikey.toString(), tmpstr) != 0);
 	GetDlgItemTextA(get_wnd(), IDC_EVENTID, tmpstr, sizeof(tmpstr));
+	console::info(tmpstr);
 	changed |= (strcmp(cfg_eventid.toString(), tmpstr) != 0);
 	return changed;
 }
@@ -106,6 +123,7 @@ void AnnouncerPreferences::reset() {
 }
 
 t_uint32 AnnouncerPreferences::get_state() {
+	console::info("Announcer: get_state()");
 	t_uint32 state = preferences_state::resettable;
 	if (HasChanged()) {
 		state |= preferences_state::changed;
@@ -114,27 +132,13 @@ t_uint32 AnnouncerPreferences::get_state() {
 }
 
 void AnnouncerPreferences::OnEditChange(UINT, int, CWindow) {
+	console::info("Announcer: OnEditChange()");
 	OnChanged();
 }
 
 void AnnouncerPreferences::OnChanged() {
 	// let foobar know stuff changed and the Apply button may need updating
 	m_callback->on_state_changed();
-}
-
-BOOL CALLBACK AnnouncerPreferences::proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
-	console::info("AnnouncerPreferences::proc()");
-	if (message == WM_INITDIALOG) {
-		auto self = reinterpret_cast<AnnouncerPreferences*>(lparam);
-		if (self) {
-			console::info("AnnouncerPreferences handling WM_INITDIALOG");
-			self->m_hWnd = hwnd;
-			self->OnInitDialog(CWindow(hwnd), lparam);
-		}
-		return TRUE;
-	}
-
-	return FALSE;
 }
 
 class preferences_page_myimpl : public preferences_page_impl<AnnouncerPreferences> {
