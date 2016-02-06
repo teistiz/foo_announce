@@ -1,0 +1,6 @@
+ipch/
+Debug/
+Release/
+foo_announce.sdf
+*.aps
+.vs/
