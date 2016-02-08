@@ -14,6 +14,7 @@ TODO (2013-02-23)
 #include <fstream>
 #include <map>
 #include <vector>
+#include <memory>
 
 // this is mandatory.
 DECLARE_COMPONENT_VERSION("foo_announce", "0.2", "Foobar2000 track announcer");
@@ -27,59 +28,6 @@ extern cfg_string cfg_apikey;
 WSADATA wsaData;
 using dict = std::map<std::string, std::string>;
 
-// FIXME: remove me
-#define CFG_FILE "foo_announce.cfg"
-
-struct foo_announce_settings {
-	std::string hostname;
-	std::string port;
-	std::string apikey;
-	std::string event_id;
-	std::string host_path;
-
-	foo_announce_settings()
-	: hostname("localhost"), port("8080"), event_id("0"), host_path("/")
-	{
-		if(!read(CFG_FILE)) {
-			console::error("Unable to read configuration file!");
-		}
-	}
-
-	bool read(const char *path) {
-		std::ifstream ifs(path);
-		if(!ifs.good())
-			return false;
-		char tmp[1024];
-		int mid;
-		while(ifs.good()) {
-			ifs.getline(tmp, 1024);
-			std::string line(tmp);
-
-			if((mid = line.find_first_of(' ')) == std::string::npos) {
-				continue;
-			}
-			std::string key = line.substr(0, mid);
-			std::string val = line.substr(mid+1);
-
-			if(key.length() && val.length()) {
-				std::string info = key + ": \""  + val + "\"";
-				console::info(info.c_str());
-				if(key == "hostname") {
-					hostname = val;
-				} else if(key == "port") {
-					port = val;
-				} else if(key == "key") {
-					apikey = val;
-				} else if(key == "event_id") {
-					event_id = val;
-				} else if(key == "path") {
-					host_path = val;
-				}
-			}
-		}
-		return true;
-	}
-};
 
 std::string escape_json_string(std::string str) {
 	size_t p = 0;
@@ -202,6 +150,7 @@ DWORD WINAPI post_thread(LPVOID params) {
 		i_res = recv(conn, buf, 1024, 0);
 		reply.write(buf, i_res);
 	}
+	// this API is thread-safe, right?
 	console::info(reply.str().c_str());
 
 	shutdown(conn, SD_SEND);
@@ -249,16 +198,72 @@ protected:
 
 	void announce(const dict &msg)
 	{
-		post_params *params = new post_params;
+		auto params = std::unique_ptr<post_params>(new post_params);
 		params->dict = msg;
 		params->dict["event_id"] = cfg_eventid.toString();
 		params->dict["key"] = cfg_apikey.toString();
 		
-		// TODO: parse cfg_address into host, port and path. it's not too hard.
-		params->hostname = settings.hostname;
-		params->port = settings.port;
-		params->path = settings.host_path;
-		CreateThread(NULL, 0, post_thread, params, 0, NULL);
+		// the address format is hostname[:port][/path/to/api]
+		auto hoststring = cfg_address.toString();
+
+		if (!hoststring || hoststring[0] == '\0') {
+			console::error("Announcer unconfigured, not sending anything.");
+			return;
+		}
+
+		int parsing_section = 0; // hostname, then port, then path
+		size_t hostname_end = 0; // not inclusive
+		size_t port_start = 0;
+		size_t port_end = 0; // not inclusive
+		size_t path_start = 0;
+		int port = 0;
+		size_t pos = 0;
+		char c;
+
+		while (c = hoststring[pos]) {
+			// state machines, yay
+			switch (parsing_section) {
+				case 0: { // hostname, read characters until ':' or '/'
+					if (c == ':') { // port incoming
+						parsing_section = 1;
+						hostname_end = pos;
+						port_start = pos + 1;
+					}
+					else if (c == '/') {
+						parsing_section = 2;
+						hostname_end = path_start = pos;
+					}
+					break;
+
+				}
+				case 1: {
+					if (c == '/') { // ports are followed by path
+						port_end = pos;
+						path_start = pos;
+					}
+					else {
+					}
+					break;
+				}
+			}
+			pos++;
+		}
+		if (!hostname_end) {
+			hostname_end = pos;
+		}
+		if (!port_end && port_start) {
+			port_end = pos;
+		}
+		std::string str_hostname(hoststring, hostname_end);
+		std::string str_port = (port_start > 0) ?
+			std::string(hoststring + port_start, port_end - port_start) : "80";
+		std::string str_path = (path_start > 0) ?
+			std::string(hoststring + path_start, pos - path_start) : "/";
+		
+		params->hostname = str_hostname;
+		params->port = str_port;
+		params->path = str_path;
+		CreateThread(NULL, 0, post_thread, params.release(), 0, NULL);
 	}
 	void init_formatters()
 	{
@@ -270,7 +275,6 @@ protected:
 			compiler->compile_safe_ex(fmt_artist, "[%artist%]");
 		}
 	}
-	foo_announce_settings settings;
 };
 
 /**
