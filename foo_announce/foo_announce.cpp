@@ -21,6 +21,7 @@ DECLARE_COMPONENT_VERSION("foo_announce", "0.2", "Foobar2000 track announcer");
 // prevent renaming library or loading multiple different copies
 VALIDATE_COMPONENT_FILENAME("foo_announce.dll");
 
+extern cfg_bool   cfg_enabled;
 extern cfg_string cfg_address;
 extern cfg_string cfg_eventid;
 extern cfg_string cfg_apikey;
@@ -97,7 +98,10 @@ DWORD WINAPI post_thread(LPVOID params) {
 	int i_res = getaddrinfo(p->hostname.c_str(), p->port.c_str(), &hints, &result);
 	if(i_res)
 	{
-		console::error("foo_announce: Failed to resolve announce server address!");
+		char tmp[256];
+		snprintf(tmp, sizeof(tmp), "foo_announce: Can't resolve address %s",
+			p->hostname.c_str());
+		console::error(tmp);
 		return 0; // yes, nonzero = success according to msdn
 	}
 	SOCKET conn = INVALID_SOCKET;
@@ -113,7 +117,10 @@ DWORD WINAPI post_thread(LPVOID params) {
 	i_res = connect(conn, ptr->ai_addr, (int)ptr->ai_addrlen);
 	if(i_res == SOCKET_ERROR)
 	{
-		console::error("foo_announce: Failed to connect to announce server!");
+		char tmp[256];
+		snprintf(tmp, sizeof(tmp), "foo_announce: Can't connect to %s (port %s)",
+			p->hostname.c_str(), p->port.c_str());
+		console::error(tmp);
 		return 0;
 	}
 	freeaddrinfo(result);
@@ -175,7 +182,7 @@ public:
 		p_track->format_title(NULL, out_artist, fmt_artist, NULL);
 
 		dict msg;
-		msg["type"] = "play";
+		msg["state"] = "play";
 		msg["title"] = out_title;
 		msg["artist"] = out_artist;
 		announce(msg);
@@ -189,7 +196,7 @@ public:
 			return;
 		}
 		dict msg;
-		msg["type"] = "stop";
+		msg["state"] = "stop";
 		announce(msg);
 	}
 protected:
@@ -234,14 +241,12 @@ protected:
 						hostname_end = path_start = pos;
 					}
 					break;
-
 				}
 				case 1: {
 					if (c == '/') { // ports are followed by path
 						port_end = pos;
 						path_start = pos;
-					}
-					else {
+						parsing_section = 2;
 					}
 					break;
 				}
@@ -259,6 +264,11 @@ protected:
 			std::string(hoststring + port_start, port_end - port_start) : "80";
 		std::string str_path = (path_start > 0) ?
 			std::string(hoststring + path_start, pos - path_start) : "/";
+
+		char tmp[512];
+		snprintf(tmp, sizeof(tmp), "posting to: host %s / port %s / path %s",
+			str_hostname.c_str(), str_port.c_str(), str_path.c_str());
+		console::info(tmp);
 		
 		params->hostname = str_hostname;
 		params->port = str_port;
