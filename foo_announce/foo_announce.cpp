@@ -112,6 +112,8 @@ DWORD WINAPI post_thread(LPVOID params) {
 		console::error("foo_announce: Failed to init socket!");
 		return 0;
 	}
+	int timeout = 5000;
+	setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, (char*)(&timeout), sizeof(int));
 
 	i_res = connect(conn, ptr->ai_addr, (int)ptr->ai_addrlen);
 	if(i_res == SOCKET_ERROR)
