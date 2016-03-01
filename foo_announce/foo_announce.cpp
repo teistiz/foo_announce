@@ -1,14 +1,6 @@
-// foo_announce.cpp : Defines the exported functions for the DLL application.
-// I'd _almost_ forgotten the horror of coding anything for teh windoze.
-// Now it's fresh in my mind.
+// foo_announce.cpp
+// (c) 2013-2016 Tommi Teistelä
 
-/*
-TODO (2013-02-23)
-
-[ ] Escape control characters in JSON strings
-[ ] Parse settings as a map and grab values somewhere else?
-[ ] ...
-*/
 #include "stdafx.h"
 #include <sstream>
 #include <fstream>
@@ -30,15 +22,22 @@ WSADATA wsaData;
 using dict = std::map<std::string, std::string>;
 
 
+static bool needs_escape(char c) {
+	return c == '\\' || c == '"';
+}
+
 std::string escape_json_string(std::string str) {
-	size_t p = 0;
-	std::string res = str;
-	while(p < res.length()) {
-		if(res[p] == '"') {
-			res.insert(p, "\\");
-			p++;
+	size_t escaped_length = 0;
+	for (char c : str) {
+		escaped_length += needs_escape(c) ? 2 : 1;
+	}
+	std::string res;
+	res.reserve(escaped_length);
+	for (char c : str) {
+		if (needs_escape(c)) {
+			res.push_back('\\');
 		}
-		p++;
+		res.push_back(c);
 	}
 	return res;
 }
@@ -147,19 +146,31 @@ DWORD WINAPI post_thread(LPVOID params) {
 		console::error("foo_announce: Send failed!");
 		shutdown(conn, SD_SEND);
 		closesocket(conn);
+		return 0;
 	}
 
 	// try to read reply
 	i_res = 1;
 	char buf[1024];
 	std::stringstream reply;
-	while(i_res > 0) {
-		i_res = recv(conn, buf, 1024, 0);
+	while(i_res > 0) { 
+		i_res = recv(conn, buf, sizeof(buf), 0);
+		if (i_res == SOCKET_ERROR) {
+			break;
+		}
+		// we could just quit as soon as we see '\n'...
 		reply.write(buf, i_res);
 	}
-	// this API is thread-safe, right?
-	console::info(reply.str().c_str());
-
+	// reuse buffer to read first line
+	reply.getline(buf, sizeof(buf));
+	if (!strstr(buf, "200 OK")) {
+		// this API is thread-safe, right?
+		console::info("foo_announce: server error:");
+		console::info(reply.str().c_str());
+	}
+	else {
+		console::info("foo_announce: server: 200 OK");
+	}
 	shutdown(conn, SD_SEND);
 	closesocket(conn);
 	return 1;
@@ -174,6 +185,9 @@ class playback_announcer : public play_callback_impl_base
 public:
 	void on_playback_new_track(metadb_handle_ptr p_track)
 	{
+		if (!cfg_enabled) {
+			return;
+		}
 		init_formatters();
 
 		pfc::string_formatter out_title;
@@ -189,6 +203,9 @@ public:
 	}
 	void on_playback_stop(play_control::t_stop_reason p_reason)
 	{
+		if (!cfg_enabled) {
+			return;
+		}
 		if(p_reason == playback_control::stop_reason_starting_another
 		   || p_reason == playback_control::stop_reason_eof)
 		{
@@ -295,10 +312,10 @@ class pba_initquit : public initquit
 public:
 	void on_init()
 	{
-		console::print("Initializing crappy playback announcer!");
+		console::print("Initializing playback announcer.");
 		// Is this safe to do here?
 		WSAStartup(MAKEWORD(2,2), &wsaData);
-		new playback_announcer(); // captain, the hull is leaking
+		new playback_announcer(); // does it matter if we lose the pointer?
 	}
 	void on_quit() { }
 };

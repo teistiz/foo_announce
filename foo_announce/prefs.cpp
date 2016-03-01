@@ -42,6 +42,7 @@ public:
 		COMMAND_HANDLER_EX(IDC_SERVERADDRESS, EN_CHANGE, OnEditChange)
 		COMMAND_HANDLER_EX(IDC_APIKEY, EN_CHANGE, OnEditChange)
 		COMMAND_HANDLER_EX(IDC_EVENTID, EN_CHANGE, OnEditChange)
+		COMMAND_HANDLER_EX(IDC_ENABLED, EN_CHANGE, OnEditChange)
 	END_MSG_MAP()
 
 	// preferences page overrides
@@ -57,12 +58,14 @@ private:
 	// this is used to tell Foobar we might have something
 	// it will call get_state() in response
 	const preferences_page_callback::ptr m_callback;
+public:
 };
 
 BOOL AnnouncerPreferences::OnInitDialog(CWindow window, LPARAM) {
 	SetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, cfg_address.toString());
 	SetDlgItemTextA(get_wnd(), IDC_APIKEY, cfg_apikey.toString());
 	SetDlgItemTextA(get_wnd(), IDC_EVENTID, cfg_eventid.toString());
+	CheckDlgButton(IDC_ENABLED, cfg_enabled ? BST_CHECKED : BST_UNCHECKED);
 	return TRUE;
 }
 
@@ -75,6 +78,7 @@ void AnnouncerPreferences::apply() {
 	cfg_apikey.set_string(tmpstr, len);
 	len = GetDlgItemTextA(get_wnd(), IDC_EVENTID, tmpstr, sizeof(tmpstr));
 	cfg_eventid.set_string(tmpstr, len);
+	cfg_enabled = IsDlgButtonChecked(IDC_ENABLED) == BST_CHECKED;
 	OnChanged();
 }
 
@@ -88,6 +92,7 @@ bool AnnouncerPreferences::HasChanged() {
 	changed |= (strcmp(cfg_apikey.toString(), tmpstr) != 0);
 	GetDlgItemTextA(get_wnd(), IDC_EVENTID, tmpstr, sizeof(tmpstr));
 	changed |= (strcmp(cfg_eventid.toString(), tmpstr) != 0);
+	changed |= (IsDlgButtonChecked(IDC_ENABLED) == BST_CHECKED) != cfg_enabled;
 	return changed;
 }
 
@@ -96,6 +101,7 @@ void AnnouncerPreferences::reset() {
 	SetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, "");
 	SetDlgItemTextA(get_wnd(), IDC_APIKEY, "");
 	SetDlgItemTextA(get_wnd(), IDC_EVENTID, "");
+	CheckDlgButton(IDC_ENABLED, false);
 }
 
 t_uint32 AnnouncerPreferences::get_state() {
