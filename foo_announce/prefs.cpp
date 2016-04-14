@@ -24,18 +24,19 @@ cfg_string cfg_address(guid_configAddress, "hostname:port/path/to/api");
 cfg_string cfg_eventid(guid_configEventID, "");
 cfg_string cfg_apikey(guid_configAPIKey, "");
 
-// This is shown inside foobar.
+/// This dialog is displayed embedded into the foobar2000 configuration. 
 class AnnouncerPreferences
-: public CDialogImpl <AnnouncerPreferences>,
-  public preferences_page_instance
+	: public CDialogImpl <AnnouncerPreferences>,
+	public preferences_page_instance
 {
 public:
 	AnnouncerPreferences(preferences_page_callback::ptr callback)
 		: m_callback(callback)
 	{
 	}
-	
+
 	enum { IDD = IDD_DIALOG1 };
+
 	// WTL message mapping
 	BEGIN_MSG_MAP(AnnouncerPreferences)
 		MSG_WM_INITDIALOG(OnInitDialog)
@@ -55,8 +56,8 @@ private:
 	bool HasChanged();
 	void OnChanged();
 
-	// this is used to tell Foobar we might have something
-	// it will call get_state() in response
+	// This is used to tell Foobar we might have something.
+	// It will call get_state() in response.
 	const preferences_page_callback::ptr m_callback;
 public:
 };
@@ -97,7 +98,6 @@ bool AnnouncerPreferences::HasChanged() {
 }
 
 void AnnouncerPreferences::reset() {
-	// set dialog items back to defaults
 	SetDlgItemTextA(get_wnd(), IDC_SERVERADDRESS, "");
 	SetDlgItemTextA(get_wnd(), IDC_APIKEY, "");
 	SetDlgItemTextA(get_wnd(), IDC_EVENTID, "");
@@ -117,7 +117,7 @@ void AnnouncerPreferences::OnEditChange(UINT, int, CWindow) {
 }
 
 void AnnouncerPreferences::OnChanged() {
-	// let foobar know stuff changed and the Apply button may need updating
+	// let foobar know about the changes so the "Apply" button is enabled
 	m_callback->on_state_changed();
 }
 
